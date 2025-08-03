@@ -56,6 +56,21 @@ local function next_table_key(t, current)
 	return keys[1]
 end
 
+local function get_transpose(rotate_value)
+	if rotate_value == 90 then
+		return "transpose=clock"
+	end
+	if rotate_value == 180 then
+		return "hflip"
+	end
+
+	if rotate_value == 270 then
+		return "transpose=cclock"
+	end
+
+	return nil
+end
+
 ACTIONS = {}
 
 ACTIONS.COPY = function(d)
@@ -66,12 +81,19 @@ ACTIONS.COPY = function(d)
 		"-ss", d.start_time,
 		"-t", d.duration,
 		"-i", d.inpath,
-		"-c", "copy",
 		"-map", "0",
 		"-dn",
-		"-avoid_negative_ts", "make_zero",
-		utils.join_path(d.indir, "COPY_" .. d.channel .. "_" .. d.infile_noext .. "_FROM_" .. d.start_time_hms .. "_TO_" .. d.end_time_hms .. d.ext)
+		"-avoid_negative_ts", "make_zero"
 	}
+	local transpose = get_transpose(d.rotation)
+	if transpose ~= nil then
+		table.insert(args, "-vf")
+		table.insert(args, transpose)
+	else
+		table.insert(args, "-c")
+		table.insert(args, "copy")
+	end
+	table.insert(args, utils.join_path(d.indir, "COPY_" .. d.channel .. "_" .. d.infile_noext .. "_FROM_" .. d.start_time_hms .. "_TO_" .. d.end_time_hms .. d.ext))
 	mp.command_native_async({
 		name = "subprocess",
 		args = args,
@@ -89,9 +111,14 @@ ACTIONS.ENCODE = function(d)
 		"-i", d.inpath,
 		"-pix_fmt", "yuv420p",
 		"-crf", "16",
-		"-preset", "superfast",
-		utils.join_path(d.indir, "ENCODE_" .. d.channel .. "_" .. d.infile_noext .. "_FROM_" .. d.start_time_hms .. "_TO_" .. d.end_time_hms .. d.ext)
+		"-preset", "superfast"
 	}
+	local transpose = get_transpose(d.rotation)
+	if transpose ~= nil then
+		table.insert(args, "-vf")
+		table.insert(args, transpose)
+	end
+	table.insert(args, utils.join_path(d.indir, "ENCODE_" .. d.channel .. "_" .. d.infile_noext .. "_FROM_" .. d.start_time_hms .. "_TO_" .. d.end_time_hms .. d.ext))
 	mp.command_native_async({
 		name = "subprocess",
 		args = args,
@@ -156,6 +183,7 @@ local function get_data()
 	d.infile_noext = mp.get_property("filename/no-ext")
 	d.ext = mp.get_property("filename"):match("^.+(%..+)$") or ".mp4"
 	d.channel = get_current_channel_name()
+	d.rotation = tonumber(mp.get_property("video-rotate"))
 	return d
 end
 
